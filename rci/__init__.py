@@ -13,7 +13,7 @@ import logging
 import thread
 import threading
 import time
-from wsgiref.simple_server import make_server
+from wsgiref.simple_server import make_server, WSGIRequestHandler
 import webob
 from webob.dec import wsgify
 
@@ -45,9 +45,17 @@ __all__ = ['add_rci_callback', 'process_request', 'stop_rci_callback', #standard
            'set_wsgi_handler', 'connected'] # extra functions for running on a PC
 
 # set up logger
-logger = logging.getLogger("rci")
+logger = logging.getLogger("cp4pc.rci")
 logger.setLevel(logging.INFO)
 
+class RCIWSGIRequestHandler(WSGIRequestHandler):
+    # overridden from WSGIRequestHandler::BaseHTTPRequestHandler
+    def log_message(self, format, *args):
+        global logger
+        logger.debug("%s - - [%s] %s" %
+                         (self.address_string(),
+                          self.log_date_time_string(),
+                          format%args))
 
 class RCIHandler(object):
     """Manage the device tree and its mapping to rci requests"""
@@ -75,13 +83,21 @@ class RCIHandler(object):
     def handle_rci_request(self, xml_text):
         """Return RCI response based on our tree structure"""
         global logger
-        root = ET.fromstring(xml_text)
+
+        try:
+            root = ET.fromstring(xml_text)
+        except Exception, e:
+            logger.warn("RCIHandler received malformed XML: %s" % str(e))
+            return_xml = '<error id="1" desc="%s" />' % str(e)
+            return_xml = self._rci_response(return_xml)
+            return return_xml
 
         return_xml = ""
         if not root.tag == "rci_request":
             logger.warn("RCIHandler received non-RCI request with root tag %s" % root.tag)
             return_xml = ('<error id="1" desc="Expected rci_request root'
-                          ' node but got something else />')
+                          ' node but got something else" />')
+
         for xml_child in root:
             logger.info("Received %s request" % xml_child.tag)
             logger.debug("Full request %s"%xml_text)
@@ -194,7 +210,7 @@ class HTTPHandler(threading.Thread):
                 time.sleep(1)
                 continue
             logger.info("Starting web server at http://localhost:%d" % local_port)
-            make_server('', local_port, self).serve_forever()
+            make_server('', local_port, self, handler_class=RCIWSGIRequestHandler).serve_forever()
     
     def set_handler(self, handler):
         self.handler = handler
