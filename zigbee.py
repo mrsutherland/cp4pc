@@ -87,9 +87,9 @@ def MAC_to_address_string(MAC_address, num_bytes = 8):
 def address_string_to_MAC(address_string):
     "Convert an address string to a MAC address"
     if address_string[0] == "[":
-        return int("0x" + string.replace(address_string[1:-2], ":", ""), 16)
+        return int("0x" + str.replace(address_string[1:-2], ":", ""), 16)
     else:
-        return int("0x" + string.replace(address_string[0:-1], ":", ""), 16)
+        return int("0x" + str.replace(address_string[0:-1], ":", ""), 16)
         
 def short_to_address_string(short_address):
     "Convert a short (network) address to a string"
@@ -113,7 +113,7 @@ class API_Data:
 
     def __init__(self):
         "Creates API_Data object"
-        self.data = ""
+        self.data = b""
         self.frame_id = 0
 
     @staticmethod
@@ -142,7 +142,7 @@ class IEEE_802_15_4_64_Data(API_Data):
     tx_id = 0x00
     "Transmit API message type ID"
     
-    def __init__(self, source_address = None, destination_address = None, payload = ""):
+    def __init__(self, source_address=None, destination_address=None, payload=b""):
         "Initializes the zb_data with no data."
         API_Data.__init__(self)        
         self.source_address = source_address
@@ -169,12 +169,12 @@ class IEEE_802_15_4_64_Data(API_Data):
     def export(self):
         "Export a XBee message as a 0x00 XBee frame cmd_data"
         self.frame_id = self.next_frame()
-        cmd_data = chr(self.frame_id) #frame id
-        cmd_data += struct.pack(">Q", address_string_to_MAC(self.destination_address[0])) # destination_address_64
+        cmd_data = bytearray((self.frame_id,))  #frame id
+        cmd_data += struct.pack(">Q", address_string_to_MAC(self.destination_address[0]))  # destination_address_64
         if len(self.destination_address) > 4:
-            cmd_data += chr(self.destination_address[4])
+            cmd_data += bytearray((self.destination_address[4],))
         else:
-            cmd_data += chr(0) # default to no options
+            cmd_data += bytearray((0,))  # default to no options
         cmd_data += self.payload
         return cmd_data
 
@@ -188,7 +188,7 @@ class IEEE_802_15_4_16_Data(API_Data):
     tx_id = 0x01
     "Transmit API message type ID"
     
-    def __init__(self, source_address = None, destination_address = None, payload = ""):
+    def __init__(self, source_address=None, destination_address=None, payload=b""):
         "Initializes the zb_data with no data."
         API_Data.__init__(self)        
         self.source_address = source_address
@@ -200,7 +200,7 @@ class IEEE_802_15_4_16_Data(API_Data):
         "Extract a XBee message from a 0x81 XBee frame cmd_data"
         if len(cmd_data) < 4:
             #Message too small, return error
-            logger.warn("Malformed message - too small")
+            logger.warning("Malformed message - too small")
             return -1
         source_address_16, self.rssi, options = struct.unpack(">HBB", cmd_data[:4])
         self.payload = cmd_data[4:]
@@ -215,12 +215,12 @@ class IEEE_802_15_4_16_Data(API_Data):
     def export(self):
         "Export a XBee message as a 0x01 XBee frame cmd_data"
         self.frame_id = self.next_frame()
-        cmd_data = chr(self.frame_id) #frame id
-        cmd_data += struct.pack(">H", address_string_to_short(self.destination_address[0])) # destination_address_16
+        cmd_data = bytearray((self.frame_id,))  #frame id
+        cmd_data += struct.pack(">H", address_string_to_short(self.destination_address[0]))  # destination_address_16
         if len(self.destination_address) > 4:
-            cmd_data += chr(self.destination_address[4])
+            cmd_data += bytearray((self.destination_address[4],))
         else:
-            cmd_data += chr(0) # default to no options
+            cmd_data += bytearray((0,)) # default to no options
         cmd_data += self.payload
         return cmd_data
 
@@ -234,7 +234,7 @@ class ZB_Data(API_Data):
     tx_id = 0x11
     "Transmit API message type ID"
     
-    def __init__(self, source_address = None, destination_address = None, payload = ""):
+    def __init__(self, source_address=None, destination_address=None, payload=b""):
         "Initializes the zb_data with no data."
         API_Data.__init__(self)        
         self.source_address = source_address
@@ -244,8 +244,8 @@ class ZB_Data(API_Data):
     def extract(self, cmd_data):
         "Extract a XBee message from a 0x91 XBee frame cmd_data"
         if len(cmd_data) < 17:
-            #Message too small, return error
-            logger.warn("Malformed message - too small")
+            # Message too small, return error
+            logger.warning("Malformed message - too small")
             return -1
         source_address_64, source_address_16, source_endpoint, destination_endpoint, \
             cluster_id, profile_id, options = struct.unpack(">QHBBHHB", cmd_data[:17])
@@ -266,23 +266,23 @@ class ZB_Data(API_Data):
     def export(self):
         "Export a XBee message as a 0x11 XBee frame cmd_data"
         self.frame_id = self.next_frame()
-        cmd_data = chr(self.frame_id) #frame id
+        cmd_data = bytearray((self.frame_id,)) #frame id
         if len(self.destination_address[0]) == 7: # [XXXX]! short address
             cmd_data += struct.pack(">Q", 0xFFFFFFFFFFFFFFFF)
             cmd_data += struct.pack(">H", address_string_to_short(self.destination_address[0]))
         else: # long address
             cmd_data += struct.pack(">Q", address_string_to_MAC(self.destination_address[0])) # destination_address_64
             # TTDO: should set to last know short address to improve performance
-            cmd_data += chr(0xFF) + chr(0xFE) # destination_address_16
-        cmd_data += struct.pack(">BBHHB", self.source_address[1], # source_endpoint
-                                          self.destination_address[1],# destination_endpoint
-                                          self.destination_address[3], # cluster_id
-                                          self.destination_address[2], # profile_id
-                                          self.BROADCAST_RADIUS) # broadcast radius
+            cmd_data += bytearray((0xFF, 0xFE))  # destination_address_16
+        cmd_data += struct.pack(">BBHHB", self.source_address[1],  # source_endpoint
+                                          self.destination_address[1],  # destination_endpoint
+                                          self.destination_address[3],  # cluster_id
+                                          self.destination_address[2],  # profile_id
+                                          self.BROADCAST_RADIUS)  # broadcast radius
         if len(self.destination_address) > 4:
-            cmd_data += chr(self.destination_address[4])
+            cmd_data += bytearray((self.destination_address[4],))
         else:
-            cmd_data += chr(0) # default to no options
+            cmd_data += bytearray((0,))  # default to no options
         cmd_data += self.payload
         return cmd_data
     
@@ -293,7 +293,7 @@ class Local_AT_Data(API_Data):
     "Receive API message type ID"
     tx_id = 0x08
     "Transmit API message type ID"
-    def __init__(self, AT_cmd = "", value = ""):
+    def __init__(self, AT_cmd=b"", value=b""):
         API_Data.__init__(self)
         "Initializes the AT frame with no data."
         self.AT_cmd = AT_cmd
@@ -306,18 +306,18 @@ class Local_AT_Data(API_Data):
     def extract(self, cmd_data):
         "Extract an AT response message from a 0x88 xbee frame cmd_data"
         if len(cmd_data) < 4:
-            #Message too small, return error
+            # Message too small, return error
             return -1
-        self.frame_id = ord(cmd_data[0])
+        self.frame_id = cmd_data[0]
         self.AT_cmd = cmd_data[1:3]
-        self.status = ord(cmd_data[3])
-        self.value = cmd_data[4:] #NOTE: some messages have no value
+        self.status = cmd_data[3]
+        self.value = cmd_data[4:]  # NOTE: some messages have no value
         return 0
         
     def export(self):
         "Export an AT message as a 0x08 xbee frame cmd_data"
         self.frame_id = self.next_frame()
-        cmd_data = chr(self.frame_id)
+        cmd_data = bytearray((self.frame_id,))
         cmd_data += self.AT_cmd
         cmd_data += self.value
         return cmd_data
@@ -329,7 +329,7 @@ class Remote_AT_Data(API_Data):
     "Receive API message type ID"
     tx_id = 0x17
     "Transmit API message type ID"
-    def __init__(self, remote_address = None, AT_cmd = "", value = ""):
+    def __init__(self, remote_address=None, AT_cmd="", value=""):
         API_Data.__init__(self)
         "Initializes the AT frame with no data."
         self.remote_address = remote_address
@@ -349,19 +349,19 @@ class Remote_AT_Data(API_Data):
         self.frame_id, source_address_64, source_address_16 = struct.unpack(">BQH", cmd_data[:11])
         self.remote_address = MAC_to_address_string(source_address_64)
         self.AT_cmd = cmd_data[11:13]
-        self.status = ord(cmd_data[13])
+        self.status = cmd_data[13]
         self.value = cmd_data[14:] #NOTE: some messages have no value
         return 0
         
     def export(self):
         "Export a remote AT message as a 0x17 xbee frame cmd_data"
         self.frame_id = self.next_frame()
-        cmd_data = chr(self.frame_id)
-        cmd_data += struct.pack(">Q", address_string_to_MAC(self.remote_address)) # destination_address_64
-        cmd_data += chr(0xFF) + chr(0xFE) # destination_address_16
-        cmd_data += chr(0x02) # Command Options (Always set immediately)        
-        cmd_data += self.AT_cmd
-        cmd_data += self.value
+        cmd_data = bytearray((self.frame_id,))
+        cmd_data += struct.pack(">Q", address_string_to_MAC(self.remote_address))  # destination_address_64
+        cmd_data += bytearray((0xFF, 0xFE))  # destination_address_16
+        cmd_data += bytearray((0x02,))  # Command Options (Always set immediately)
+        cmd_data += bytearray(self.AT_cmd, 'ascii')
+        cmd_data += bytearray(self.value, 'ascii')
         return cmd_data
 
 
@@ -375,7 +375,7 @@ class Register_Device_Data(API_Data):
     SUCCESS = 0x00
     INVALID_ADDRESS = 0xB3
     KEY_NOT_FOUND = 0xFF
-    def __init__(self, remote_address = None, link_key = ""):
+    def __init__(self, remote_address=None, link_key=""):
         API_Data.__init__(self)
         "Initializes the register device with no data."
         self.remote_address = remote_address
@@ -388,20 +388,20 @@ class Register_Device_Data(API_Data):
     def extract(self, cmd_data):
         "Extract a register device response message from a 0xA4 xbee frame cmd_data"
         if len(cmd_data) < 2:
-            #Message too small, return error
+            # Message too small, return error
             return -1
-        self.frame_id = ord(cmd_data[0])
-        self.status = ord(cmd_data[1])
+        self.frame_id = cmd_data[0]
+        self.status = cmd_data[1]
         return 0
         
     def export(self):
         "Export a register device message as a 0x24 xbee frame cmd_data"
         self.frame_id = self.next_frame()
-        cmd_data = chr(self.frame_id)
-        cmd_data += struct.pack(">Q", address_string_to_MAC(self.remote_address)) # destination_address_64
-        cmd_data += chr(0xFF) + chr(0xFE) # destination_address_16, always set to 0xFFFE
-        cmd_data += chr(0x00) # Key Options (Always set to 0)        
-        cmd_data += self.link_key
+        cmd_data = bytearray((self.frame_id,))
+        cmd_data += struct.pack(">Q", address_string_to_MAC(self.remote_address))  # destination_address_64
+        cmd_data += bytearray((0xFF, 0xFE))  # destination_address_16, always set to 0xFFFE
+        cmd_data += bytearray((0x00,))  # Key Options (Always set to 0)
+        cmd_data += bytearray(self.link_key, 'ascii')
         return cmd_data
 
 
@@ -415,7 +415,7 @@ class IEEE_802_15_4_Tx_Status_Data(API_Data):
     CCA_FAILURE = 0x02
     PURGED = 0x03
 
-    def __init__(self, delivery_status = SUCCESS):
+    def __init__(self, delivery_status=SUCCESS):
         API_Data.__init__(self)
         "Initializes the register device with no data."
         self.delivery_status = delivery_status
@@ -424,7 +424,7 @@ class IEEE_802_15_4_Tx_Status_Data(API_Data):
     def extract(self, cmd_data):
         "Extract a ZigBee Tx Status message from a 0x8B xbee frame cmd_data"
         if len(cmd_data) < 2:
-            #Message too small, return error
+            # Message too small, return error
             return -1
         # extract data
         self.frame_id, self.delivery_status = struct.unpack(">BB", cmd_data[:2])
@@ -432,8 +432,8 @@ class IEEE_802_15_4_Tx_Status_Data(API_Data):
         
     def export(self):
         "Will export a TX Status Message.  May be used for local message routing."
-        cmd_data = chr(self.frame_id)
-        cmd_data += chr(self.delivery_status)
+        cmd_data = bytearray((self.frame_id,))
+        cmd_data += bytearray((self.delivery_status,))
         return cmd_data
 
 
@@ -459,7 +459,7 @@ class ZigBee_Tx_Status_Data(API_Data):
     ROUTE_DISCOVERY = 0x02
     ADDRESS_AND_ROUTE_DISCOVERY = 0x03
 
-    def __init__(self, remote_network_address = "[FFFE]!", transmit_retry_count = 0, delivery_status = SUCCESS, discovery_status = NO_DISCOVERY_OVERHEAD):
+    def __init__(self, remote_network_address="[FFFE]!", transmit_retry_count=0, delivery_status=SUCCESS, discovery_status=NO_DISCOVERY_OVERHEAD):
         API_Data.__init__(self)
         "Initializes the register device with no data."
         self.remote_network_address = remote_network_address
@@ -474,21 +474,21 @@ class ZigBee_Tx_Status_Data(API_Data):
     def extract(self, cmd_data):
         "Extract a ZigBee Tx Status message from a 0x8B xbee frame cmd_data"
         if len(cmd_data) < 6:
-            #Message too small, return error
+            # Message too small, return error
             return -1
         # extract data
         self.frame_id, short_address, self.transmit_retry_count, self.delivery_status, self.discovery_status = struct.unpack(">BHBBB", cmd_data)
-        #convert short network address to string
+        # convert short network address to string
         self.remote_network_address = short_to_address_string(short_address)
         return 6
         
     def export(self):
         "Will export a TX Status Message.  May be used for local message routing."
-        cmd_data = chr(self.frame_id)
+        cmd_data = bytearray((self.frame_id,))
         cmd_data += struct.pack(">H", address_string_to_short(self.remote_network_address)) # remote_address_16
-        cmd_data += chr(self.transmit_retry_count)        
-        cmd_data += chr(self.delivery_status)
-        cmd_data += chr(self.discovery_status)
+        cmd_data += bytearray((self.transmit_retry_count,))
+        cmd_data += bytearray((self.delivery_status,))
+        cmd_data += bytearray((self.discovery_status,))
         return cmd_data            
 
 
@@ -496,7 +496,7 @@ class IEEE_802_15_4_64_IO(API_Data):
     "Extracts from an 802.15.4 Receive 64-bit Address IO."
     rx_id = 0x82
 
-    def __init__(self, source_address = None, destination_address = None, rssi=None, payload = ""):
+    def __init__(self, source_address=None, destination_address=None, rssi=None, payload=b""):
         "Initializes the IO data with no data."
         API_Data.__init__(self)        
         self.source_address = source_address
@@ -506,7 +506,7 @@ class IEEE_802_15_4_64_IO(API_Data):
     def extract(self, cmd_data):
         "Extract a XBee message from a 0x82 XBee frame cmd_data"
         if len(cmd_data) < 10:
-            #Message too small, return error
+            # Message too small, return error
             logger.warn("Malformed message - too small")
             return -1
         source_address_64, self.rssi, options = struct.unpack(">QBB", cmd_data[:10])
@@ -515,14 +515,14 @@ class IEEE_802_15_4_64_IO(API_Data):
         address_string = MAC_to_address_string(source_address_64)            
         # convert source address to proper string format, create address tuple
         # NOTE: 6th parameter is only used for TX Status - always set to zero.
-        self.source_address = (address_string, 0xe8, 0x0, 0x92, options, 0) #NOTE: 0xe8 is quirk of socket
+        self.source_address = (address_string, 0xe8, 0x0, 0x92, options, 0) # NOTE: 0xe8 is quirk of socket
         return 0
 
 class IEEE_802_15_4_16_IO(API_Data):
     "Extracts from an 802.15.4 Receive 16-bit Address IO."
     rx_id = 0x83
 
-    def __init__(self, source_address = None, destination_address = None, rssi=None, payload = ""):
+    def __init__(self, source_address=None, destination_address=None, rssi=None, payload=b""):
         "Initializes the IO data with no data."
         API_Data.__init__(self)        
         self.source_address = source_address
@@ -532,7 +532,7 @@ class IEEE_802_15_4_16_IO(API_Data):
     def extract(self, cmd_data):
         "Extract a XBee message from a 0x83 XBee frame cmd_data"
         if len(cmd_data) < 4:
-            #Message too small, return error
+            # Message too small, return error
             logger.warn("Malformed message - too small")
             return -1
         source_address_16, self.rssi, options = struct.unpack(">HBB", cmd_data[:4])
@@ -580,7 +580,7 @@ class API_Message:
         "Calculates the checksum, based on cmd_data"
         checksum = self.API_ID
         for byte in self.cmd_data:
-            checksum += ord(byte)
+            checksum += byte
             checksum &= 0xFF
         return 0xFF - checksum
     
@@ -605,49 +605,49 @@ class API_Message:
             return -1
         
         # pull out length (MSB)
-        length = ord(buffer[1]) * 255 + ord(buffer[2])
+        length = buffer[1] * 255 + buffer[2]
         
         if len(buffer) < length + 4:
             return -1
 
         # we have a full XBee message, lets extract it.
         self.length = length
-        self.API_ID = ord(buffer[3])
+        self.API_ID = buffer[3]
         self.cmd_data = buffer[4:length+3]
         if self.API_ID in self.API_IDs.keys():
             self.api_data = self.API_IDs[self.API_ID]()
         else:
             self.api_data = API_Data()
         self.api_data.extract(self.cmd_data)
-        self.checksum = ord(buffer[length + 3])
+        self.checksum = buffer[length + 3]
 
         return len(self)
 
-        
-    def export(self, recalculate_checksum = 1):
+
+    def export(self, recalculate_checksum=1):
         """Exports the message to a string, will recalculate checksum by default.
         Will also re-calculate the length field and lookup API_ID from message type."""
-        self.set_API_ID() # must be done before calculating checksum
-        self.cmd_data = self.api_data.export() # must be done before calculating checksum
-        self.checksum = self.calc_checksum() # calculate the new checksum and set it
-        self.set_length() # set the new length
-        return chr(0x7E) + chr(self.length / 255) + chr(self.length & 0xFF) + chr(self.API_ID) + self.cmd_data + chr(self.checksum)
+        self.set_API_ID()  # must be done before calculating checksum
+        self.cmd_data = self.api_data.export()  # must be done before calculating checksum
+        self.checksum = self.calc_checksum()  # calculate the new checksum and set it
+        self.set_length()  # set the new length
+        return bytearray((0x7E, self.length // 255, self.length & 0xFF, self.API_ID)) + self.cmd_data + bytearray((self.checksum,))
 
 
 class ZDO_Frame:
-    def __init__(self, buf = None, address = None):
+    def __init__(self, buf=None, address=None):
         """Parse frame and store the address, create blank frame if no buffer."""
         self.address = address
         if buf is None:
             self.transaction_sequence_number = 0
-            self.payload = ""
+            self.payload = b""
         else:
-            self.transaction_sequence_number = ord(buf[0])
+            self.transaction_sequence_number = buf[0]
             self.payload = buf[1:]
     
     def export(self):
         """Create frame as a string of bytes"""
-        return chr(self.transaction_sequence_number) + self.payload
+        return bytearray((self.transaction_sequence_number,)) + self.payload
    
 
 class Conversation:
@@ -655,12 +655,12 @@ class Conversation:
     default_timeout = 40
     """Default timeout period for waiting for response for conversation"""
     
-    def __init__(self, frame, callback = None, timeout_callback = None, timeout = None, extra_data = None):
+    def __init__(self, frame, callback=None, timeout_callback=None, timeout=None, extra_data=None):
         self.start_time = time.time()
-        self.active = True  #will switch to false once this conversation has finished
+        self.active = True  # will switch to false once this conversation has finished
         self.frame = frame
-        #The address attribute is primarily used in error reporting.
-        #Some conversations may not have a valid frame but will override self.address appropriately.
+        # The address attribute is primarily used in error reporting.
+        # Some conversations may not have a valid frame but will override self.address appropriately.
         if frame is not None:
             self.address = frame.address
         else:
@@ -671,14 +671,14 @@ class Conversation:
             self.timeout = self.default_timeout
         else:
             self.timeout = timeout
-        self.extra_data = extra_data  #there are times when it is useful to store additional information in a conversation
+        self.extra_data = extra_data  # there are times when it is useful to store additional information in a conversation
         
     def match_frame(self, frame):
-        #a base conversation object should always fail matches
+        # a base conversation object should always fail matches
         return False
         
     def tick_sec(self):
-        if (time.time() - self.start_time > self.timeout):
+        if time.time() - self.start_time > self.timeout:
             # we timed out on the response
             self.active = False
             if self.timeout_callback is not None:
@@ -722,9 +722,9 @@ class ZDO_Device_annce_cluster_server:
             try:
                 record = Device_Annce()
                 record.extract(frame.payload)
-                # TTDO: should this be a record list?
+                # TODO: should this be a record list?
                 self.callback(record)
-            except Exception, e:
+            except Exception as e:
                 logger.debug("Error: ZDO_Device_annce_cluster_server: %s" % str(e))
 
 
@@ -739,12 +739,12 @@ class ZDO_Mgmt_Lqi_cluster_client:
     def send_frame(self, frame):
         self.xbee.send_zb(0, frame.address, frame.export())
     
-    def send_command(self, dest_address, start_index, callback = None):
-        if callback == None:
+    def send_command(self, dest_address, start_index, callback=None):
+        if callback is None:
             callback = self.default_callback
         frame = ZDO_Frame()
         frame.transaction_sequence_number = self.next_sequence_number()
-        frame.payload = chr(start_index)
+        frame.payload = bytearray((start_index,))
         frame.address = (dest_address, 0, 0, self.cluster_id)
         self.send_frame(frame)
         self.conversations.append(ZDO_Conversation(frame, callback))
@@ -752,14 +752,14 @@ class ZDO_Mgmt_Lqi_cluster_client:
     def next_sequence_number(self):
         "Get the next transaction sequence number to use for sending a message."
         self.sequence_number += 1
-        self.sequence_number &= 0xFF # limit from 0-255 (8-bit value)
+        self.sequence_number &= 0xFF  # limit from 0-255 (8-bit value)
         return self.sequence_number
     
     def handle_message(self, frame):
         #print "Received LQI message from %s" % str(source_address)
         #purge any dead conversations
         for temp_conversation in self.conversations[:]:
-            if temp_conversation.active == False:
+            if temp_conversation.active is False:
                 self.conversations.remove(temp_conversation)
         #check all conversations for matches with the frame; if no conversations match raise exception 
         conversation = None
@@ -784,7 +784,7 @@ class ZDO_Mgmt_Lqi_cluster_client:
 
 
 class LQI_aggregator:
-    def __init__(self, client_lqi_cluster, dest_address, start_index = 0, callback = None):
+    def __init__(self, client_lqi_cluster, dest_address, start_index=0, callback=None):
         self.client_lqi_cluster = client_lqi_cluster
         self.dest_address = dest_address
         self.start_index = start_index
@@ -808,15 +808,15 @@ class LQI_aggregator:
 
 class NeighborTableDescriptorRecord:
     def __init__(self,
-                 pan_extended = None,
-                 addr_extended = None,
-                 addr_short = None,
-                 device_type = None,
-                 rx_on_when_idle = None,
-                 relationship = None,
-                 permit_joining = None,
-                 depth = None,
-                 lqi = None):
+                 pan_extended=None,
+                 addr_extended=None,
+                 addr_short=None,
+                 device_type=None,
+                 rx_on_when_idle=None,
+                 relationship=None,
+                 permit_joining=None,
+                 depth=None,
+                 lqi=None):
         
         self.pan_extended = pan_extended
         self.addr_extended = addr_extended
@@ -846,7 +846,7 @@ class NeighborTableDescriptorRecord:
             self.addr_extended = MAC_to_address_string(self.addr_extended, 8)
             self.addr_short = short_to_address_string(self.addr_short)
             return 22
-        except Exception, e:
+        except Exception as e:
             raise Exception("Error: NeighborTableListRecord.extract() - %s" % e)
     
     def export(self):
@@ -880,12 +880,12 @@ class Mgmt_Lqi_rsp:
         self.neighbor_table_list = neighbor_table_list
     
     def extract(self, buffer):
-        self.status = ord(buffer[0])
+        self.status = buffer[0]
         if self.status == 0: #SUCCESS 
             self.neighbor_table_entries, self.start_index, neighbor_table_list_count = struct.unpack("<BBB", buffer[1:4])
             if neighbor_table_list_count > 0:
                 offset = 4
-                for i in xrange(neighbor_table_list_count):
+                for i in range(neighbor_table_list_count):
                     record = NeighborTableDescriptorRecord()
                     offset += record.extract(buffer[offset:])
                     self.neighbor_table_list.append(record)
@@ -927,7 +927,7 @@ class Device_Annce:
         #Allocate address                 1         
         try:
             self.nwk_addr, self.IEEE_addr, self.capability = struct.unpack("<HQB", buffer[0:11])
-        except Exception,e:
+        except Exception as e:
             raise Exception("Error: Device_Annce.extract() - %s" % e)
 
 
@@ -946,7 +946,7 @@ class XBee:
         "Serial port that connects to the xbee"
         self.rx_messages = {}
         "Messages received from the XBee. Key = endpoint_id, value = (payload, full_source_address)"
-        self.rx_buffer = ""
+        self.rx_buffer = b""
         "Receive buffer for the serial port"
         self.node_list = []
         "Node list for the get_node_list function"
@@ -1018,35 +1018,35 @@ class XBee:
         try:
             # dev_idea: could keep track of frame_id and the responses.
             if self.serial is not None and self.serial.isOpen():
-                self.serial.write(message.export())
+                self.serial.write(message.export())#.encode("ascii"))
                 debug_str = ""
                 if message.API_ID == 0x11:  #TODO: temporary filter
                     debug_str = "TX: API ID = %s\n" % hex(message.API_ID)
                     #frame ID
-                    debug_str += "[" + ", ".join(["%02X" %(ord(x)) for x in message.cmd_data[0:1]]) + "]:"
+                    debug_str += "[" + ", ".join(["%02X" %(x) for x in message.cmd_data[0:1]]) + "]:"
                     #64-bit address        
-                    debug_str += "[" + ", ".join(["%02X" %(ord(x)) for x in message.cmd_data[1:9]]) + "]:"
+                    debug_str += "[" + ", ".join(["%02X" %(x) for x in message.cmd_data[1:9]]) + "]:"
                     #16-bit address        
-                    debug_str += "[" + ", ".join(["%02X" %(ord(x)) for x in message.cmd_data[9:11]]) + "]:"
+                    debug_str += "[" + ", ".join(["%02X" %(x) for x in message.cmd_data[9:11]]) + "]:"
                     #source endpoint      
-                    debug_str += "[" + ", ".join(["%02X" %(ord(x)) for x in message.cmd_data[11:12]]) + "]:"
+                    debug_str += "[" + ", ".join(["%02X" %(x) for x in message.cmd_data[11:12]]) + "]:"
                     #destination endpoint      
-                    debug_str += "[" + ", ".join(["%02X" %(ord(x)) for x in message.cmd_data[12:13]]) + "]:"
+                    debug_str += "[" + ", ".join(["%02X" %(x) for x in message.cmd_data[12:13]]) + "]:"
                     #cluster     
-                    debug_str += "[" + ", ".join(["%02X" %(ord(x)) for x in message.cmd_data[13:15]]) + "]:"
+                    debug_str += "[" + ", ".join(["%02X" %(x) for x in message.cmd_data[13:15]]) + "]:"
                     #profile     
-                    debug_str += "[" + ", ".join(["%02X" %(ord(x)) for x in message.cmd_data[15:17]]) + "]:"
+                    debug_str += "[" + ", ".join(["%02X" %(x) for x in message.cmd_data[15:17]]) + "]:"
                     #broadcast radius   
-                    debug_str += "[" + ", ".join(["%02X" %(ord(x)) for x in message.cmd_data[17:18]]) + "]:"
+                    debug_str += "[" + ", ".join(["%02X" %(x) for x in message.cmd_data[17:18]]) + "]:"
                     #options   
-                    debug_str += "[" + ", ".join(["%02X" %(ord(x)) for x in message.cmd_data[18:19]]) + "]:"
+                    debug_str += "[" + ", ".join(["%02X" %(x) for x in message.cmd_data[18:19]]) + "]:"
                     #payload     
-                    debug_str += "[" + ", ".join(["%02X" %(ord(x)) for x in message.cmd_data[19:]]) + "]"
+                    debug_str += "[" + ", ".join(["%02X" %(x) for x in message.cmd_data[19:]]) + "]"
                     if MESH_TRACEBACK and debug_callback is not None:
                         debug_callback(debug_str)
                 else:
                     debug_str = "TX: API ID = %s\n" % hex(message.API_ID)
-                    debug_str += str([hex(ord(x)) for x in message.cmd_data])    
+                    debug_str += str([hex(x) for x in message.cmd_data])
                 logger.debug(debug_str)
         finally:
             _global_lock.release()
@@ -1122,26 +1122,26 @@ class XBee:
         if message.API_ID == 0x91:  #TTDO: temporary filter
             debug_str = "RX: API ID = %s\n" % hex(message.API_ID)
             #64-bit address        
-            debug_str += "[" + ", ".join(["%02X" %(ord(x)) for x in message.cmd_data[0:8]]) + "]:"
+            debug_str += "[" + ", ".join(["%02X" %(x) for x in message.cmd_data[0:8]]) + "]:"
             #16-bit address
-            debug_str += "[" + ", ".join(["%02X" %(ord(x)) for x in message.cmd_data[8:10]]) + "]:"
+            debug_str += "[" + ", ".join(["%02X" %(x) for x in message.cmd_data[8:10]]) + "]:"
             #source endpoint
-            debug_str += "[" + ", ".join(["%02X" %(ord(x)) for x in message.cmd_data[10:11]]) + "]:"
+            debug_str += "[" + ", ".join(["%02X" %(x) for x in message.cmd_data[10:11]]) + "]:"
             #destination endpoint
-            debug_str += "[" + ", ".join(["%02X" %(ord(x)) for x in message.cmd_data[11:12]]) + "]:"
+            debug_str += "[" + ", ".join(["%02X" %(x) for x in message.cmd_data[11:12]]) + "]:"
             #cluster ID
-            debug_str += "[" + ", ".join(["%02X" %(ord(x)) for x in message.cmd_data[12:14]]) + "]:"
+            debug_str += "[" + ", ".join(["%02X" %(x) for x in message.cmd_data[12:14]]) + "]:"
             #profile ID
-            debug_str += "[" + ", ".join(["%02X" %(ord(x)) for x in message.cmd_data[14:16]]) + "]:"
+            debug_str += "[" + ", ".join(["%02X" %(x) for x in message.cmd_data[14:16]]) + "]:"
             #options
-            debug_str += "[" + ", ".join(["%02X" %(ord(x)) for x in message.cmd_data[16:17]]) + "]:"
+            debug_str += "[" + ", ".join(["%02X" %(x) for x in message.cmd_data[16:17]]) + "]:"
             #payload
-            debug_str += "[" + ", ".join(["%02X" %(ord(x)) for x in message.cmd_data[17:]]) + "]"
+            debug_str += "[" + ", ".join(["%02X" %(x) for x in message.cmd_data[17:]]) + "]"
             if MESH_TRACEBACK and debug_callback is not None:
                 debug_callback(debug_str)
         else:
             debug_str = "RX: API ID = %s\n" % hex(message.API_ID)
-            debug_str += str([hex(ord(x)) for x in message.cmd_data])
+            debug_str += str([hex(x) for x in message.cmd_data])
         logger.debug(debug_str)
         
         if message.API_ID == ZB_Data.rx_id: # CMD ID for explicit receive
@@ -1227,7 +1227,7 @@ class XBee:
             if status_data.frame_id in self.tx_status:
                 # Tx Status matches existing frame id, queue response in socket
                 transaction_id, endpoint_id = self.tx_status[status_data.frame_id]
-                delivery_status = chr(ZigBee_Tx_Status_Data.rx_id) + status_data.export()
+                delivery_status = bytearray((ZigBee_Tx_Status_Data.rx_id,)) + status_data.export()
                 tx_status_tuple = (delivery_status, ("[00:00:00:00:00:00:00:00]!", endpoint_id, 0xC105, message.API_ID, 0, transaction_id))
                 self.rx_messages[endpoint_id].append(tx_status_tuple)                                        
         else:
@@ -1248,7 +1248,7 @@ class XBee:
                 self.rx_buffer += self.serial.read(self.serial.inWaiting()) #read everything that is available
             while 1:
                 # sanitize buffer up to first candidate API frame:
-                s_idx = self.rx_buffer.find('\x7e')
+                s_idx = self.rx_buffer.find(b'\x7e')
                 if s_idx != -1:
                     self.rx_buffer = self.rx_buffer[s_idx:]
                 message = API_Message() #create message and try to fill it from the serial port data.
@@ -1263,7 +1263,7 @@ class XBee:
                 if message.is_valid():
                     try:
                         return self.process_message(message, message_buffer, AT_frame_id, force_com)
-                    except Exception, e:
+                    except Exception as e:
                         logger.warning("exception during API message processing: %s" % str(e))
                 else:
                     # Advance rx_buffer; useful in the case where ~~ appears in stream
@@ -1298,9 +1298,10 @@ class XBee:
             if not force_com and not com_port_opened: #a global
                 raise Exception("ddo_get_param: serial port not open")
             # check format of id
-            if not isinstance(id, str):
-                raise Exception("ddo_get_param() argument 2 must be string or read-only buffer, not " + str(id.type()))
-            elif len(id) != 2:
+            if not isinstance(id, bytes):
+                id = bytearray(id, 'ascii')
+                #raise Exception("ddo_get_param() argument 2 must be string or read-only buffer, not " + str(type(id)))
+            if len(id) != 2:
                 raise Exception("ddo_get_param: id string must be two characters!")
             # create message to send.
             message = API_Message()
@@ -1321,7 +1322,7 @@ class XBee:
             at_response = None
             start_time = time.time()
             while start_time + timeout > time.time():
-                at_response = self.read_messages(AT_frame_id, force_com = force_com)
+                at_response = self.read_messages(AT_frame_id, force_com=force_com)
                 if at_response is not None:
                     break
             else:
@@ -1337,21 +1338,22 @@ class XBee:
             if not com_port_opened: #a global
                 raise Exception("ddo_set_param: serial port not opened")
             # check format of id
-            if not isinstance(id, str):
+            if not isinstance(id, bytes):
+                id = bytearray(id, 'ascii')
                 # TTDO: this should be a type error
-                raise Exception("ddo_set_param() argument 2 must be string or read-only buffer, not " + str(id.type()))
-            elif len(id) != 2:
+                #raise Exception("ddo_set_param() argument 2 must be string or read-only buffer, not " + str(id.type()))
+            if len(id) != 2:
                 raise Exception("ddo_set_param: id string must be two characters!")
             # convert integer values to a string
-            if isinstance(value, int) or isinstance(value, long):
-                value_str = "" 
+            if isinstance(value, int):
+                value_str = b""
                 # convert to big endian string representation
                 while value > 0:
-                    value_str = chr(value & 0xFF) + value_str
-                    value /= 0x100
+                    value_str = bytearray((value & 0xFF,)) + value_str
+                    value //= 0x100
                 if value_str == "":
                     # default to zero 
-                    value_str = chr(0)
+                    value_str = bytearray((0,))
                 value = value_str
                         
             # create message to send.
@@ -1396,21 +1398,21 @@ class XBee:
             if not com_port_opened: #a global
                 raise Exception("ddo_command: serial port not opened")
             # check format of id
-            if not isinstance(id, str):
-                # TTDO: this should be a type error
-                raise Exception("ddo_command() argument 2 must be string or read-only buffer, not " + str(id.type()))
+            if not isinstance(id, bytes):
+                id = bytes(id, 'ascii')
+                #raise Exception("ddo_command() argument 2 must be string or read-only buffer, not " + str(id.type()))
             elif len(id) != 2:
                 raise Exception("ddo_command: id string must be two characters!")
             # convert integer values to a string
-            if isinstance(param, int) or isinstance(param, long):
-                param_str = ""
+            if isinstance(param, int):
+                param_str = b""
                 # convert to big endian string representation
                 while param > 0:
-                    param_str = chr(param & 0xFF) + param_str
-                    param /= 0x100
-                if param_str == "":
+                    param_str = bytearray((param & 0xFF,)) + param_str
+                    param //= 0x100
+                if param_str == b"":
                     # default to zero 
-                    param_str = chr(0)
+                    param_str = bytearray((0,))
                 param = param_str
             elif param is None:
                 param = ""
@@ -1858,11 +1860,11 @@ original_socket = socket.socket
 class XBeeSocket(original_socket):
     """Extend socket.socket with XBee emulation hooks."""
     def __init__(self, family=socket.AF_INET, type=socket.SOCK_STREAM,
-                 proto=0, _sock=None, xbee=default_xbee):
+                 proto=0, fileno=None, xbee=default_xbee):
         if family == socket.AF_XBEE:
             self.__xb_init(family, type, proto, xbee)
         else:
-            original_socket.__init__(self, family, type, proto, _sock)            
+            original_socket.__init__(self, family, type, proto, fileno)
 
     def __xb_init(self, family, type, proto, xbee):
         self._family = family
@@ -2046,9 +2048,9 @@ socket.getaddrinfo = getaddrinfo
 # initialize serial port
 #this is done in a separate thread so that the rest of the program can continue to initialize however it can while the XBee is unavailable
 
-import thread
+import _thread as thread
 import serial
-import simulator_settings
+from . import simulator_settings
 
 #simple global to make sure that initial startup happens in expected order (if serial port is available it should be instantiated from the start)
 ran_first_time = False
@@ -2082,23 +2084,23 @@ def open_com_thread():
                     try:
                         default_xbee.ddo_set_param(None, "D6", 1)
                         default_xbee.ddo_set_param(None, "D7", 1)
-                    except Exception, e:
+                    except Exception as e:
                         # Continue with opening XBee, this is NOT a fatal error.
                         logger.warning("unable to initialize XBee DDO params: %s" % repr(e))
                     try:
                         if not default_xbee.is_series_1():
                             # ATAO not supported on XBee series 1
                             default_xbee.ddo_set_param(None, "AO", 3)
-                    except Exception, e:
+                    except Exception as e:
                         logger.warning("unable to initialize XBee DDO params: %s" % repr(e))
                 try:
                     default_xbee.get_node_list(refresh=True, blocking=False) #kick off discovery of nodes on network
-                except Exception, e:
+                except Exception as e:
                     logger.warning("exception during XBee node discovery: %s" % e)
                 logger.info("Serial port for XBee opened successfully (%s, %s)" % (simulator_settings.settings.get('com_port', 'No COM'), simulator_settings.settings.get('baud', 'no baud')))
                 ran_first_time = True
                 return
-            except Exception, e:
+            except Exception as e:
                 if not ran_first_time:
                     logger.error("Exception while creating serial port (%s, %s): %s" % (simulator_settings.settings.get('com_port', 'No COM'), simulator_settings.settings.get('baud', 'no baud'), e))
                     ran_first_time = True

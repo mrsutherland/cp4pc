@@ -14,13 +14,14 @@ __version__ = "1.6.0"
 import uuid
 import json
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 def _decode_list(data):
     rv = []
     for item in data:
-        if isinstance(item, unicode):
-            item = item.encode('utf-8')
-        elif isinstance(item, list):
+        if isinstance(item, list):
             item = _decode_list(item)
         elif isinstance(item, dict):
             item = _decode_dict(item)
@@ -29,12 +30,8 @@ def _decode_list(data):
 
 def _decode_dict(data):
     rv = {}
-    for key, value in data.iteritems():
-        if isinstance(key, unicode):
-            key = key.encode('utf-8')
-        if isinstance(value, unicode):
-            value = value.encode('utf-8')
-        elif isinstance(value, list):
+    for key, value in data.items():
+        if isinstance(value, list):
             value = _decode_list(value)
         elif isinstance(value, dict):
             value = _decode_dict(value)
@@ -51,8 +48,8 @@ class SettingsDict(dict):
             try:
                 # The object_hook is used to translate the unicode strings into utf-8 strings
                 return dict.__init__(self, json.load(fp, object_hook=_decode_dict))
-            except:
-                pass
+            except Exception as e:
+                logger.warning("Exception loading settings file %s: %s"%(filename, e))
             finally:
                 fp.close()
         return dict.__init__(self)    
